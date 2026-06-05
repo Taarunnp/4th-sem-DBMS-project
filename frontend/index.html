@@ -1,0 +1,1262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Basketball DBMS</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #ffffff;
+      --surface: #f4f4f7;
+      --card: #ffffff;
+      --border: rgba(0,0,0,0.10);
+      --orange: #f97316;
+      --orange-dim: rgba(249,115,22,0.12);
+      --gold: #b8860b;
+      --gold-dim: rgba(234,179,8,0.15);
+      --text: #0d0d12;
+      --muted: #5b5b6b;
+      --green: #16a34a;
+      --red: #dc2626;
+      --blue: #2563eb;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Outfit', sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── NOISE OVERLAY ── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── COURT LINES BG ── */
+    .court-bg {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      overflow: hidden;
+      opacity: 0.06;
+    }
+    .court-bg svg { width: 100%; height: 100%; }
+
+    /* ── LAYOUT ── */
+    .wrapper {
+      position: relative;
+      z-index: 1;
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 0 24px 80px;
+    }
+
+    /* ── HEADER ── */
+    header {
+      padding: 32px 0 24px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 32px;
+    }
+    .logo {
+      display: flex;
+      flex-direction: column;
+    }
+    .logo-tag {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.2em;
+      color: var(--orange);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .logo-title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(36px, 5vw, 60px);
+      letter-spacing: 0.04em;
+      line-height: 1;
+      color: var(--text);
+    }
+    .student-info {
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 10px;
+      line-height: 1.6;
+    }
+    .student-info strong { color: var(--text); font-weight: 500; }
+    .api-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+      transition: background 0.4s;
+    }
+    .status-dot.online { background: var(--green); box-shadow: 0 0 8px var(--green); }
+    .status-dot.demo { background: var(--gold); box-shadow: 0 0 8px var(--gold); }
+    .status-dot.offline { background: var(--red); }
+
+    /* ── TABS ── */
+    .tabs {
+      display: flex;
+      gap: 4px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 4px;
+      margin-bottom: 28px;
+      overflow-x: auto;
+    }
+    .tab-btn {
+      flex: 1;
+      min-width: 120px;
+      padding: 10px 16px;
+      border: none;
+      border-radius: 9px;
+      background: transparent;
+      color: var(--muted);
+      font-family: 'Outfit', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .tab-btn:hover { color: var(--text); background: var(--border); }
+    .tab-btn.active {
+      background: var(--orange);
+      color: #fff;
+      box-shadow: 0 4px 16px rgba(249,115,22,0.35);
+    }
+
+    /* ── PANELS ── */
+    .panel { display: none; animation: fadeUp 0.3s ease; }
+    .panel.active { display: block; }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── SECTION HEADER ── */
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    .section-title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 28px;
+      letter-spacing: 0.06em;
+      color: var(--text);
+    }
+
+    /* ── STAT CARDS (dashboard) ── */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+    .stat-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px 24px;
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.2s, border-color 0.2s;
+    }
+    .stat-card:hover { transform: translateY(-2px); border-color: var(--orange); }
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0; right: 0;
+      width: 80px; height: 80px;
+      background: radial-gradient(circle, var(--orange-dim) 0%, transparent 70%);
+    }
+    .stat-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.15em;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .stat-value {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 42px;
+      line-height: 1;
+      color: var(--orange);
+    }
+    .stat-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+    /* ── TABLE ── */
+    .table-wrap {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+    .table-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .search-box {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 14px;
+      flex: 1;
+      max-width: 320px;
+    }
+    .search-box input {
+      background: none;
+      border: none;
+      outline: none;
+      color: var(--text);
+      font-family: 'Outfit', sans-serif;
+      font-size: 13px;
+      width: 100%;
+    }
+    .search-box input::placeholder { color: var(--muted); }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding: 12px 16px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    td {
+      padding: 13px 16px;
+      font-size: 13px;
+      border-bottom: 1px solid rgba(0,0,0,0.06);
+      vertical-align: middle;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(0,0,0,0.03); }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .badge-pos { background: var(--orange-dim); color: var(--orange); }
+    .badge-team { background: var(--gold-dim); color: var(--gold); }
+
+    .jersey {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px; height: 28px;
+      border-radius: 6px;
+      background: var(--orange-dim);
+      color: var(--orange);
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 16px;
+    }
+
+    .pts-bar-wrap { display: flex; align-items: center; gap: 10px; }
+    .pts-bar {
+      height: 4px;
+      border-radius: 2px;
+      background: linear-gradient(90deg, var(--orange), var(--gold));
+      min-width: 4px;
+      transition: width 0.6s ease;
+    }
+
+    /* ── ACTIONS ── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-family: 'Outfit', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.18s;
+    }
+    .btn-primary { background: var(--orange); color: #fff; }
+    .btn-primary:hover { background: #ea6b0a; box-shadow: 0 4px 16px rgba(249,115,22,0.4); }
+    .btn-ghost { background: var(--surface); border: 1px solid var(--border); color: var(--text); }
+    .btn-ghost:hover { border-color: var(--orange); color: var(--orange); }
+    .btn-danger { background: rgba(239,68,68,0.12); color: var(--red); border: 1px solid rgba(239,68,68,0.2); }
+    .btn-danger:hover { background: rgba(239,68,68,0.2); }
+    .btn-sm { padding: 5px 10px; font-size: 12px; }
+
+    /* ── MODAL ── */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.75);
+      backdrop-filter: blur(6px);
+      z-index: 100;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 32px;
+      width: 100%;
+      max-width: 520px;
+      position: relative;
+      animation: scaleIn 0.25s ease;
+    }
+    @keyframes scaleIn {
+      from { transform: scale(0.93); opacity: 0; }
+      to   { transform: scale(1); opacity: 1; }
+    }
+    .modal-title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 26px;
+      letter-spacing: 0.06em;
+      margin-bottom: 24px;
+    }
+    .modal-close {
+      position: absolute;
+      top: 20px; right: 20px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      width: 32px; height: 32px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 16px;
+      transition: all 0.2s;
+    }
+    .modal-close:hover { color: var(--text); border-color: var(--text); }
+
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-group.full { grid-column: 1 / -1; }
+    .form-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .form-input, .form-select {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      color: var(--text);
+      font-family: 'Outfit', sans-serif;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.2s;
+      width: 100%;
+    }
+    .form-input:focus, .form-select:focus { border-color: var(--orange); }
+    .form-select option { background: var(--card); }
+
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 24px;
+      justify-content: flex-end;
+    }
+
+    /* ── TOAST ── */
+    .toast {
+      position: fixed;
+      bottom: 28px; right: 28px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      z-index: 999;
+      transform: translateY(120px);
+      opacity: 0;
+      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      max-width: 360px;
+    }
+    .toast.show { transform: translateY(0); opacity: 1; }
+    .toast.success { border-left: 3px solid var(--green); }
+    .toast.error { border-left: 3px solid var(--red); }
+
+    /* ── TEAMS GRID ── */
+    .teams-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 16px;
+    }
+    .team-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.2s, border-color 0.2s;
+    }
+    .team-card:hover { transform: translateY(-3px); border-color: var(--gold); }
+    .team-card::after {
+      content: '';
+      position: absolute;
+      bottom: -16px; right: -10px;
+      font-size: 80px;
+      opacity: 0.06;
+    }
+    .team-name {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 28px;
+      letter-spacing: 0.06em;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+    .team-city { font-size: 13px; color: var(--muted); margin-bottom: 16px; }
+    .team-meta {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .team-meta-item { display: flex; flex-direction: column; gap: 2px; }
+    .team-meta-label { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted); letter-spacing: 0.1em; }
+    .team-meta-value { font-size: 13px; font-weight: 500; }
+    .team-actions { display: flex; gap: 8px; }
+
+    /* ── STATS PANEL ── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .stats-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+    }
+    .stats-card-title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 18px;
+      letter-spacing: 0.06em;
+      margin-bottom: 16px;
+      color: var(--gold);
+    }
+    .stats-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+    }
+    .stats-row:last-child { border-bottom: none; }
+    .stats-row .label { color: var(--muted); }
+    .stats-row .value { font-weight: 600; font-family: 'DM Mono', monospace; }
+
+    .top-scorer-item {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .top-scorer-item:last-child { border-bottom: none; }
+    .rank {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 24px;
+      color: var(--muted);
+      width: 28px;
+      text-align: center;
+    }
+    .rank.gold { color: var(--gold); }
+    .scorer-info { flex: 1; }
+    .scorer-name { font-weight: 600; font-size: 14px; margin-bottom: 2px; }
+    .scorer-meta { font-size: 12px; color: var(--muted); }
+    .scorer-pts {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 28px;
+      color: var(--orange);
+    }
+
+    /* ── EMPTY STATE ── */
+    .empty {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--muted);
+    }
+    .empty-icon { font-size: 48px; margin-bottom: 12px; }
+    .empty-text { font-size: 14px; }
+
+    /* ── LOADING ── */
+    .loading {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 60px;
+      gap: 6px;
+    }
+    .loading span {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--orange);
+      animation: bounce 0.7s ease infinite;
+    }
+    .loading span:nth-child(2) { animation-delay: 0.15s; }
+    .loading span:nth-child(3) { animation-delay: 0.3s; }
+    @keyframes bounce {
+      0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+      40% { transform: scale(1); opacity: 1; }
+    }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 640px) {
+      .form-grid { grid-template-columns: 1fr; }
+      table th:nth-child(n+5), table td:nth-child(n+5) { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Court BG Lines -->
+<div class="court-bg">
+  <svg viewBox="0 0 1440 900" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+    <rect x="200" y="50" width="1040" height="800" rx="8" stroke="#1f1f29" stroke-width="2"/>
+    <line x1="720" y1="50" x2="720" y2="850" stroke="#1f1f29" stroke-width="2"/>
+    <circle cx="720" cy="450" r="100" stroke="#1f1f29" stroke-width="2"/>
+    <rect x="200" y="250" width="200" height="400" stroke="#1f1f29" stroke-width="2"/>
+    <rect x="1040" y="250" width="200" height="400" stroke="#1f1f29" stroke-width="2"/>
+    <path d="M400 250 A180 180 0 0 1 400 650" stroke="#1f1f29" stroke-width="2" fill="none"/>
+    <path d="M1040 250 A180 180 0 0 0 1040 650" stroke="#1f1f29" stroke-width="2" fill="none"/>
+  </svg>
+</div>
+
+<div class="wrapper">
+  <!-- HEADER -->
+  <header>
+    <div class="logo">
+      <span class="logo-tag">DBMS Mini Project</span>
+      <h1 class="logo-title">Basketball DBMS</h1>
+      <div class="student-info">
+        <strong>Taarun Nagendra Prasad</strong> — USN 1DB23CI104<br>
+        <strong>Akshay R</strong> — USN 1DB23CI002
+      </div>
+    </div>
+    <div class="api-status">
+      <span id="statusText">Connecting…</span>
+    </div>
+  </header>
+
+  <div id="demoNote" style="display:none;margin:-12px 0 24px;padding:10px 16px;border:1px solid rgba(234,179,8,0.25);background:var(--gold-dim);border-radius:10px;font-size:12.5px;color:var(--text);font-family:'DM Mono',monospace;line-height:1.5">
+    Showing <strong>embedded sample data</strong> from <code>schema.sql</code> — no backend connected.
+    Run the FastAPI backend (or open this page with <code>?api=YOUR_BACKEND_URL</code>) for live, saved data.
+  </div>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('dashboard')">Dashboard</button>
+    <button class="tab-btn" onclick="switchTab('players')">Players</button>
+    <button class="tab-btn" onclick="switchTab('teams')">Teams</button>
+    <button class="tab-btn" onclick="switchTab('stats')">Stats</button>
+  </div>
+
+  <!-- ═══════════════ DASHBOARD ═══════════════ -->
+  <div class="panel active" id="panel-dashboard">
+    <div class="stat-grid" id="dashStats">
+      <div class="stat-card"><div class="stat-label">Total Players</div><div class="stat-value" id="statPlayers">—</div></div>
+      <div class="stat-card"><div class="stat-label">Total Teams</div><div class="stat-value" id="statTeams">—</div></div>
+      <div class="stat-card"><div class="stat-label">Top Scorer</div><div class="stat-value" id="statTop" style="font-size:22px;padding-top:6px">—</div></div>
+    </div>
+
+    <div class="section-head">
+      <div class="section-title">League Leaderboard</div>
+    </div>
+    <div class="table-wrap">
+      <div id="dashLeaderboard"><div class="loading"><span></span><span></span><span></span></div></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ PLAYERS ═══════════════ -->
+  <div class="panel" id="panel-players">
+    <div class="section-head">
+      <div class="section-title">Players Roster</div>
+      <button class="btn btn-primary" onclick="openPlayerModal()">＋ Add Player</button>
+    </div>
+    <div class="table-wrap">
+      <div class="table-toolbar">
+        <div class="search-box">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--muted)"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <input type="text" id="playerSearch" placeholder="Search players…" oninput="filterPlayers()" />
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="loadPlayers()">Refresh</button>
+      </div>
+      <div id="playersTable"><div class="loading"><span></span><span></span><span></span></div></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ TEAMS ═══════════════ -->
+  <div class="panel" id="panel-teams">
+    <div class="section-head">
+      <div class="section-title">Teams</div>
+      <button class="btn btn-primary" onclick="openTeamModal()">＋ Add Team</button>
+    </div>
+    <div class="teams-grid" id="teamsGrid"><div class="loading"><span></span><span></span><span></span></div></div>
+  </div>
+
+  <!-- ═══════════════ STATS ═══════════════ -->
+  <div class="panel" id="panel-stats">
+    <div class="section-head"><div class="section-title">Analytics</div></div>
+    <div class="stats-grid" id="statsGrid"><div class="loading"><span></span><span></span><span></span></div></div>
+    <div class="section-head" style="margin-top:8px"><div class="section-title">Top Scorers</div></div>
+    <div class="table-wrap">
+      <div style="padding:8px 16px" id="topScorers"><div class="loading"><span></span><span></span><span></span></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ PLAYER MODAL ═══════════ -->
+<div class="modal-overlay" id="playerModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('playerModal')">&times;</button>
+    <div class="modal-title" id="playerModalTitle">Add Player</div>
+    <div class="form-grid">
+      <div class="form-group full">
+        <label class="form-label">Player Name</label>
+        <input class="form-input" id="pName" placeholder="e.g. LeBron James" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Team</label>
+        <select class="form-select" id="pTeam"><option value="">— No Team —</option></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Position</label>
+        <select class="form-select" id="pPos">
+          <option value="">—</option>
+          <option>PG</option><option>SG</option><option>SF</option><option>PF</option><option>C</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Jersey #</label>
+        <input class="form-input" id="pJersey" type="number" placeholder="23" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Minutes Played</label>
+        <input class="form-input" id="pMinutes" type="number" placeholder="35" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Points Scored</label>
+        <input class="form-input" id="pPoints" type="number" placeholder="26" />
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('playerModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="submitPlayer()">Save Player</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ TEAM MODAL ═══════════ -->
+<div class="modal-overlay" id="teamModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('teamModal')">&times;</button>
+    <div class="modal-title">Add Team</div>
+    <div class="form-grid">
+      <div class="form-group full">
+        <label class="form-label">Team Name</label>
+        <input class="form-input" id="tName" placeholder="e.g. Lakers" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">City</label>
+        <input class="form-input" id="tCity" placeholder="Los Angeles" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Coach</label>
+        <input class="form-input" id="tCoach" placeholder="Coach name" />
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('teamModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="submitTeam()">Save Team</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+  const API = (new URLSearchParams(location.search).get('api')
+    || 'http://127.0.0.1:8000').replace(/\/$/, '');
+  let allPlayers = [];
+  let allTeams = [];
+  let editingPlayerId = null;
+  let maxPts = 1;
+
+  /* ════════════════════════════════════════════════════════════════
+     OFFLINE / DEMO MODE
+     If no backend is reachable (e.g. the plain GitHub Pages link), the
+     app falls back to this embedded copy of the schema.sql sample data
+     so the dashboard is never empty. CRUD here is in-memory only and
+     even mirrors the SQL triggers (player_count sync + audit log).
+     Connect a real backend (run it locally, or open with
+     ?api=YOUR_BACKEND_URL) to get live, persistent data instead.
+     ════════════════════════════════════════════════════════════════ */
+  let DEMO = false;
+
+  const DEMO_DB = {
+    teams: [
+      { team_id: 1, team_name: 'Lakers',   city: 'Los Angeles',   coach: 'Darvin Ham', player_count: 5 },
+      { team_id: 2, team_name: 'Warriors', city: 'San Francisco', coach: 'Steve Kerr', player_count: 5 },
+    ],
+    players: [
+      { player_id: 1,  player_name: 'LeBron James',    team_id: 1, position: 'SF', jersey_number: 23, minutes_played: 35, points_scored: 26 },
+      { player_id: 2,  player_name: 'Anthony Davis',   team_id: 1, position: 'PF', jersey_number: 3,  minutes_played: 33, points_scored: 25 },
+      { player_id: 3,  player_name: 'Austin Reaves',   team_id: 1, position: 'SG', jersey_number: 15, minutes_played: 30, points_scored: 16 },
+      { player_id: 4,  player_name: 'DAngelo Russell', team_id: 1, position: 'PG', jersey_number: 1,  minutes_played: 28, points_scored: 18 },
+      { player_id: 5,  player_name: 'Rui Hachimura',   team_id: 1, position: 'PF', jersey_number: 28, minutes_played: 25, points_scored: 13 },
+      { player_id: 6,  player_name: 'Stephen Curry',   team_id: 2, position: 'PG', jersey_number: 30, minutes_played: 34, points_scored: 27 },
+      { player_id: 7,  player_name: 'Klay Thompson',   team_id: 2, position: 'SG', jersey_number: 11, minutes_played: 31, points_scored: 18 },
+      { player_id: 8,  player_name: 'Andrew Wiggins',  team_id: 2, position: 'SF', jersey_number: 22, minutes_played: 30, points_scored: 17 },
+      { player_id: 9,  player_name: 'Draymond Green',  team_id: 2, position: 'PF', jersey_number: 23, minutes_played: 29, points_scored: 9 },
+      { player_id: 10, player_name: 'Kevon Looney',    team_id: 2, position: 'C',  jersey_number: 5,  minutes_played: 22, points_scored: 7 },
+    ],
+    audit: [],
+    nextPlayerId: 11,
+    nextTeamId: 3,
+    nextAuditId: 1,
+  };
+  // Seed the audit log with the 10 INSERTs (as the triggers would on first load).
+  DEMO_DB.players.forEach((p, i) => {
+    DEMO_DB.audit.push({
+      audit_id: DEMO_DB.nextAuditId++,
+      player_id: p.player_id,
+      player_name: p.player_name,
+      action: 'INSERT',
+      action_time: new Date(Date.now() - (DEMO_DB.players.length - i) * 60000).toISOString(),
+    });
+  });
+
+  function demoResp(data, ok = true, status = 200) {
+    return { ok, status, json: async () => data };
+  }
+  function recountTeams() {
+    DEMO_DB.teams.forEach(t => {
+      t.player_count = DEMO_DB.players.filter(p => p.team_id === t.team_id).length;
+    });
+  }
+  function joinPlayer(p) {
+    const t = DEMO_DB.teams.find(t => t.team_id === p.team_id);
+    return Object.assign({}, p, { team_name: t ? t.team_name : null });
+  }
+  function avgOf(arr) {
+    return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
+  }
+
+  // Mini in-browser version of the FastAPI backend, backed by DEMO_DB.
+  function demoFetch(url, options) {
+    options = options || {};
+    const method = (options.method || 'GET').toUpperCase();
+    const path = url.replace(API, '');
+    const [rawPath, query] = path.split('?');
+    const params = new URLSearchParams(query || '');
+    const parts = rawPath.split('/').filter(Boolean);
+    const body = options.body ? JSON.parse(options.body) : {};
+
+    if (rawPath === '/' || rawPath === '') return demoResp({ message: 'demo' });
+
+    // ── PLAYERS ──
+    if (parts[0] === 'players') {
+      if (parts.length === 1 && method === 'GET') {
+        return demoResp(DEMO_DB.players.slice()
+          .sort((a, b) => a.player_id - b.player_id).map(joinPlayer));
+      }
+      if (parts.length === 1 && method === 'POST') {
+        const np = {
+          player_id: DEMO_DB.nextPlayerId++,
+          player_name: body.player_name,
+          team_id: body.team_id != null ? body.team_id : null,
+          position: body.position != null ? body.position : null,
+          jersey_number: body.jersey_number != null ? body.jersey_number : null,
+          minutes_played: body.minutes_played || 0,
+          points_scored: body.points_scored || 0,
+        };
+        DEMO_DB.players.push(np);
+        recountTeams();
+        DEMO_DB.audit.push({ audit_id: DEMO_DB.nextAuditId++, player_id: np.player_id,
+          player_name: np.player_name, action: 'INSERT', action_time: new Date().toISOString() });
+        return demoResp({ message: 'Player created', player_id: np.player_id });
+      }
+      const pid = parseInt(parts[1]);
+      const idx = DEMO_DB.players.findIndex(p => p.player_id === pid);
+      if (method === 'GET') {
+        return idx === -1 ? demoResp({ detail: 'Player not found' }, false, 404)
+                          : demoResp(DEMO_DB.players[idx]);
+      }
+      if (method === 'PUT') {
+        if (idx === -1) return demoResp({ detail: 'Player not found' }, false, 404);
+        Object.assign(DEMO_DB.players[idx], {
+          player_name: body.player_name,
+          team_id: body.team_id != null ? body.team_id : null,
+          position: body.position != null ? body.position : null,
+          jersey_number: body.jersey_number != null ? body.jersey_number : null,
+          minutes_played: body.minutes_played || 0,
+          points_scored: body.points_scored || 0,
+        });
+        recountTeams();
+        return demoResp({ message: 'Player updated' });
+      }
+      if (method === 'DELETE') {
+        if (idx === -1) return demoResp({ detail: 'Player not found' }, false, 404);
+        const removed = DEMO_DB.players.splice(idx, 1)[0];
+        recountTeams();
+        DEMO_DB.audit.push({ audit_id: DEMO_DB.nextAuditId++, player_id: removed.player_id,
+          player_name: removed.player_name, action: 'DELETE', action_time: new Date().toISOString() });
+        return demoResp({ message: 'Player deleted' });
+      }
+    }
+
+    // ── TEAMS ──
+    if (parts[0] === 'teams') {
+      if (parts.length === 1 && method === 'GET') {
+        recountTeams();
+        return demoResp(DEMO_DB.teams.slice().sort((a, b) => a.team_id - b.team_id));
+      }
+      if (parts.length === 1 && method === 'POST') {
+        const nt = { team_id: DEMO_DB.nextTeamId++, team_name: body.team_name,
+          city: body.city || null, coach: body.coach || null, player_count: 0 };
+        DEMO_DB.teams.push(nt);
+        return demoResp({ message: 'Team created', team_id: nt.team_id });
+      }
+      if (method === 'DELETE') {
+        const tid = parseInt(parts[1]);
+        const idx = DEMO_DB.teams.findIndex(t => t.team_id === tid);
+        if (idx === -1) return demoResp({ detail: 'Team not found' }, false, 404);
+        DEMO_DB.teams.splice(idx, 1);
+        DEMO_DB.players.forEach(p => { if (p.team_id === tid) p.team_id = null; });
+        recountTeams();
+        return demoResp({ message: 'Team deleted' });
+      }
+    }
+
+    // ── STATS ──
+    if (parts[0] === 'stats') {
+      if (parts[1] === 'top-scorers') {
+        const limit = parseInt(params.get('limit')) || 5;
+        return demoResp(DEMO_DB.players
+          .filter(p => p.team_id != null)
+          .slice()
+          .sort((a, b) => (b.points_scored || 0) - (a.points_scored || 0))
+          .slice(0, limit)
+          .map(p => {
+            const t = DEMO_DB.teams.find(t => t.team_id === p.team_id);
+            return { player_name: p.player_name, team_name: t ? t.team_name : null,
+                     position: p.position, points_scored: p.points_scored };
+          }));
+      }
+      if (parts[1] === 'team-averages') {
+        return demoResp(DEMO_DB.teams.map(t => {
+          const ps = DEMO_DB.players.filter(p => p.team_id === t.team_id);
+          const ap = avgOf(ps.map(p => p.points_scored || 0));
+          const am = avgOf(ps.map(p => p.minutes_played || 0));
+          return {
+            team_name: t.team_name,
+            players: ps.length,
+            avg_points: ap == null ? null : Math.round(ap * 100) / 100,
+            avg_minutes: am == null ? null : Math.round(am * 10) / 10,
+            top_score: ps.length ? Math.max.apply(null, ps.map(p => p.points_scored || 0)) : null,
+          };
+        }).sort((a, b) => (b.avg_points || 0) - (a.avg_points || 0)));
+      }
+      if (parts[1] === 'team') {
+        const tid = parseInt(parts[2]);
+        const t = DEMO_DB.teams.find(t => t.team_id === tid);
+        if (!t) return demoResp({ detail: 'Team not found' }, false, 404);
+        const ps = DEMO_DB.players.filter(p => p.team_id === tid);
+        const ap = avgOf(ps.map(p => p.points_scored || 0));
+        const am = avgOf(ps.map(p => p.minutes_played || 0));
+        return demoResp({
+          team_name: t.team_name,
+          total_players: ps.length,
+          avg_points: ap == null ? null : Math.round(ap * 100) / 100,
+          avg_minutes: am == null ? null : Math.round(am * 10) / 10,
+          top_score: ps.length ? Math.max.apply(null, ps.map(p => p.points_scored || 0)) : null,
+        });
+      }
+    }
+
+    // ── AUDIT ──
+    if (parts[0] === 'audit') {
+      return demoResp(DEMO_DB.audit.slice().sort((a, b) => b.audit_id - a.audit_id));
+    }
+
+    return demoResp({ detail: 'Not found (demo)' }, false, 404);
+  }
+
+  // Routes to the real backend, or to the in-memory demo when offline.
+  function smartFetch(url, options) {
+    if (DEMO) return Promise.resolve(demoFetch(url, options));
+    return fetch(url, options);
+  }
+
+  // Updates the header status pill (online | demo) and the demo banner.
+  function setStatus(state, text) {
+    const dot = document.getElementById('statusDot');
+    const txt = document.getElementById('statusText');
+    if (dot) dot.className = 'status-dot ' + state;
+    if (txt) txt.textContent = text;
+    const note = document.getElementById('demoNote');
+    if (note) note.style.display = (state === 'demo') ? 'block' : 'none';
+  }
+
+  /* ── API HEALTH CHECK (falls back to embedded demo data) ── */
+  async function checkHealth() {
+    const forceDemo = new URLSearchParams(location.search).has('demo');
+    if (!forceDemo) {
+      try {
+        const r = await fetch(API + '/', { cache: 'no-store' });
+        if (r.ok) { DEMO = false; setStatus('online', 'API Online'); return; }
+      } catch (e) { /* backend unreachable -> fall through to demo */ }
+    }
+    DEMO = true;
+    setStatus('demo', 'Demo Data');
+  }
+
+  /* ── TABS ── */
+  const panels = ['dashboard', 'players', 'teams', 'stats'];
+  function switchTab(name) {
+    document.querySelectorAll('.tab-btn').forEach((b, i) =>
+      b.classList.toggle('active', panels[i] === name));
+    document.querySelectorAll('.panel').forEach(p =>
+      p.classList.toggle('active', p.id === 'panel-' + name));
+    if (name === 'players') loadPlayers();
+    if (name === 'teams')   loadTeams();
+    if (name === 'stats')   loadStats();
+  }
+
+  /* ── TOAST ── */
+  function toast(msg, type = 'success') {
+    const t = document.getElementById('toast');
+    const icon = type === 'success' ? '[OK]' : '[X]';
+    t.innerHTML = `<span style="color:${type==='success'?'var(--green)':'var(--red)'}">${icon}</span> ${msg}`;
+    t.className = `toast ${type} show`;
+    setTimeout(() => t.className = 'toast', 3000);
+  }
+
+  /* ── DASHBOARD ── */
+  async function loadDashboard() {
+    try {
+      const [players, teams, scorers] = await Promise.all([
+        smartFetch(`${API}/players`).then(r => r.json()),
+        smartFetch(`${API}/teams`).then(r => r.json()),
+        smartFetch(`${API}/stats/top-scorers?limit=5`).then(r => r.json())
+      ]);
+      allPlayers = players; allTeams = teams;
+
+      document.getElementById('statPlayers').textContent = players.length;
+      document.getElementById('statTeams').textContent = teams.length;
+
+      if (scorers.length) {
+        document.getElementById('statTop').textContent = scorers[0].player_name;
+      }
+
+      maxPts = Math.max(...players.map(p => p.points_scored || 0), 1);
+      renderLeaderboard(players.sort((a, b) => (b.points_scored||0) - (a.points_scored||0)));
+    } catch { toast('Could not reach API — is the backend running?', 'error'); }
+  }
+
+  function renderLeaderboard(players) {
+    if (!players.length) {
+      document.getElementById('dashLeaderboard').innerHTML = `<div class="empty"><div class="empty-icon"></div><div class="empty-text">No players yet</div></div>`;
+      return;
+    }
+    const rows = players.map((p, i) => `
+      <tr>
+        <td><span style="font-family:'Bebas Neue';font-size:20px;color:${i<3?'var(--gold)':'var(--muted)'}">${i+1}</span></td>
+        <td><strong>${p.player_name}</strong></td>
+        <td><span class="badge badge-team">${p.team_name || '—'}</span></td>
+        <td><span class="badge badge-pos">${p.position || '—'}</span></td>
+        <td>
+          <div class="pts-bar-wrap">
+            <div class="pts-bar" style="width:${Math.round((p.points_scored||0)/maxPts*120)}px"></div>
+            <span style="font-family:'DM Mono';font-size:12px">${p.points_scored || 0}</span>
+          </div>
+        </td>
+        <td style="font-family:'DM Mono';font-size:12px">${p.minutes_played || 0}</td>
+      </tr>`).join('');
+    document.getElementById('dashLeaderboard').innerHTML = `
+      <table>
+        <thead><tr><th>#</th><th>Player</th><th>Team</th><th>Pos</th><th>Pts</th><th>Min</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  }
+
+  /* ── PLAYERS ── */
+  async function loadPlayers() {
+    document.getElementById('playersTable').innerHTML = `<div class="loading"><span></span><span></span><span></span></div>`;
+    try {
+      const [players, teams] = await Promise.all([
+        smartFetch(`${API}/players`).then(r => r.json()),
+        smartFetch(`${API}/teams`).then(r => r.json())
+      ]);
+      allPlayers = players; allTeams = teams;
+      maxPts = Math.max(...players.map(p => p.points_scored || 0), 1);
+      renderPlayersTable(players);
+    } catch { document.getElementById('playersTable').innerHTML = `<div class="empty"><div class="empty-icon"></div><div class="empty-text">Failed to load players</div></div>`; }
+  }
+
+  function renderPlayersTable(players) {
+    if (!players.length) {
+      document.getElementById('playersTable').innerHTML = `<div class="empty"><div class="empty-icon"></div><div class="empty-text">No players found</div></div>`;
+      return;
+    }
+    const rows = players.map(p => `
+      <tr>
+        <td><span class="jersey">${p.jersey_number ?? '—'}</span></td>
+        <td><strong>${p.player_name}</strong></td>
+        <td><span class="badge badge-team">${p.team_name || '—'}</span></td>
+        <td><span class="badge badge-pos">${p.position || '—'}</span></td>
+        <td style="font-family:'DM Mono';font-size:12px">${p.points_scored || 0}</td>
+        <td style="font-family:'DM Mono';font-size:12px">${p.minutes_played || 0}</td>
+        <td>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-ghost btn-sm" onclick='editPlayer(${JSON.stringify(p)})'>Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="deletePlayer(${p.player_id}, '${p.player_name}')">Del</button>
+          </div>
+        </td>
+      </tr>`).join('');
+    document.getElementById('playersTable').innerHTML = `
+      <table>
+        <thead><tr><th>#</th><th>Name</th><th>Team</th><th>Pos</th><th>Pts</th><th>Min</th><th>Actions</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  }
+
+  function filterPlayers() {
+    const q = document.getElementById('playerSearch').value.toLowerCase();
+    renderPlayersTable(allPlayers.filter(p =>
+      p.player_name.toLowerCase().includes(q) ||
+      (p.team_name || '').toLowerCase().includes(q) ||
+      (p.position || '').toLowerCase().includes(q)
+    ));
+  }
+
+  /* ── PLAYER MODAL ── */
+  function openPlayerModal(player = null) {
+    editingPlayerId = player ? player.player_id : null;
+    document.getElementById('playerModalTitle').textContent = player ? 'Edit Player' : 'Add Player';
+
+    const fields = ['pName','pTeam','pPos','pJersey','pMinutes','pPoints'];
+    fields.forEach(f => { const el = document.getElementById(f); if (el) el.value = ''; });
+
+    if (player) {
+      document.getElementById('pName').value = player.player_name || '';
+      document.getElementById('pTeam').value = player.team_id || '';
+      document.getElementById('pPos').value = player.position || '';
+      document.getElementById('pJersey').value = player.jersey_number || '';
+      document.getElementById('pMinutes').value = player.minutes_played || '';
+      document.getElementById('pPoints').value = player.points_scored || '';
+    }
+
+    const sel = document.getElementById('pTeam');
+    sel.innerHTML = '<option value="">— No Team —</option>' +
+      allTeams.map(t => `<option value="${t.team_id}">${t.team_name}</option>`).join('');
+    if (player) sel.value = player.team_id || '';
+
+    document.getElementById('playerModal').classList.add('open');
+  }
+
+  function editPlayer(p) { openPlayerModal(p); }
+
+  async function submitPlayer() {
+    const body = {
+      player_name: document.getElementById('pName').value.trim(),
+      team_id: parseInt(document.getElementById('pTeam').value) || null,
+      position: document.getElementById('pPos').value || null,
+      jersey_number: parseInt(document.getElementById('pJersey').value) || null,
+      minutes_played: parseInt(document.getElementById('pMinutes').value) || 0,
+      points_scored: parseInt(document.getElementById('pPoints').value) || 0,
+    };
+    if (!body.player_name) { toast('Player name is required', 'error'); return; }
+    try {
+      const url = editingPlayerId ? `${API}/players/${editingPlayerId}` : `${API}/players`;
+      const method = editingPlayerId ? 'PUT' : 'POST';
+      const r = await smartFetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+      if (!r.ok) throw new Error();
+      toast(editingPlayerId ? 'Player updated!' : 'Player added!');
+      closeModal('playerModal');
+      loadPlayers();
+    } catch { toast('Failed to save player', 'error'); }
+  }
+
+  async function deletePlayer(id, name) {
+    if (!confirm(`Delete ${name}?`)) return;
+    try {
+      const r = await smartFetch(`${API}/players/${id}`, { method: 'DELETE' });
+      if (!r.ok) throw new Error();
+      toast(`${name} deleted`);
+      loadPlayers();
+    } catch { toast('Failed to delete player', 'error'); }
+  }
+
+  /* ── TEAMS ── */
+  async function loadTeams() {
+    document.getElementById('teamsGrid').innerHTML = `<div class="loading"><span></span><span></span><span></span></div>`;
+    try {
+      const teams = await smartFetch(`${API}/teams`).then(r => r.json());
+      allTeams = teams;
+      if (!teams.length) {
+        document.getElementById('teamsGrid').innerHTML = `<div class="empty" style="grid-column:1/-1"><div class="empty-icon"></div><div class="empty-text">No teams yet</div></div>`;
+        return;
+      }
+      document.getElementById('teamsGrid').innerHTML = teams.map(t => `
+        <div class="team-card">
+          <div class="team-name">${t.team_name}</div>
+          <div class="team-city">${t.city || 'Unknown City'}</div>
+          <div class="team-meta">
+            <div class="team-meta-item">
+              <span class="team-meta-label">Coach</span>
+              <span class="team-meta-value">${t.coach || '—'}</span>
+            </div>
+            <div class="team-meta-item">
+              <span class="team-meta-label">Roster Size</span>
+              <span class="team-meta-value">${t.player_count ?? 0} players</span>
+            </div>
+          </div>
+          <div class="team-actions">
+            <button class="btn btn-danger btn-sm" onclick="deleteTeam(${t.team_id},'${t.team_name}')">Delete Team</button>
+          </div>
+        </div>`).join('');
+    } catch { toast('Failed to load teams', 'error'); }
+  }
+
+  function openTeamModal() { document.getElementById('teamModal').classList.add('open'); }
+
+  async function submitTeam() {
+    const body = {
+      team_name: document.getElementById('tName').value.trim(),
+      city: document.getElementById('tCity').value.trim() || null,
+      coach: document.getElementById('tCoach').value.trim() || null,
+    };
+    if (!body.team_name) { toast('Team name is required', 'error'); return; }
+    try {
+      const r = await smartFetch(`${API}/teams`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+      if (!r.ok) throw new Error();
+      toast('Team created!');
+      closeModal('teamModal');
+      loadTeams();
+    } catch { toast('Failed to create team', 'error'); }
+  }
+
+  async function deleteTeam(id, name) {
+    if (!confirm(`Delete ${name}? Players will lose their team.`)) return;
+    try {
+      const r = await smartFetch(`${API}/teams/${id}`, { method: 'DELETE' });
+      if (!r.ok) throw new Error();
+      toast(`${name} deleted`);
+      loadTeams();
+    } catch { toast('Failed to delete team', 'error'); }
+  }
+
+  /* ── STATS ── */
+  async function loadStats() {
+    document.getElementById('statsGrid').innerHTML = `<div class="loading"><span></span><span></span><span></span></div>`;
+    document.getElementById('topScorers').innerHTML = `<div class="loading"><span></span><span></span><span></span></div>`;
+    try {
+      const [avgs, scorers] = await Promise.all([
+        smartFetch(`${API}/stats/team-averages`).then(r => r.json()),
+        smartFetch(`${API}/stats/top-scorers?limit=5`).then(r => r.json())
+      ]);
+
+      document.getElementById('statsGrid').innerHTML = avgs.map(t => `
+        <div class="stats-card">
+          <div class="stats-card-title">${t.team_name}</div>
+          <div class="stats-row"><span class="label">Players</span><span class="value">${t.players}</span></div>
+          <div class="stats-row"><span class="label">Avg Points</span><span class="value" style="color:var(--orange)">${t.avg_points ?? '—'}</span></div>
+          <div class="stats-row"><span class="label">Avg Minutes</span><span class="value">${t.avg_minutes ?? '—'}</span></div>
+          <div class="stats-row"><span class="label">Top Score</span><span class="value">${t.top_score ?? '—'}</span></div>
+        </div>`).join('') || `<div class="empty"><div class="empty-icon"></div><div class="empty-text">No team data</div></div>`;
+
+      if (!scorers.length) {
+        document.getElementById('topScorers').innerHTML = `<div class="empty"><div class="empty-icon"></div><div class="empty-text">No scorer data</div></div>`;
+        return;
+      }
+      document.getElementById('topScorers').innerHTML = scorers.map((s, i) => `
+        <div class="top-scorer-item">
+          <div class="rank ${i===0?'gold':''}">${i+1}</div>
+          <div class="scorer-info">
+            <div class="scorer-name">${s.player_name}</div>
+            <div class="scorer-meta">${s.team_name} · ${s.position || '—'}</div>
+          </div>
+          <div class="scorer-pts">${s.points_scored ?? '—'}</div>
+        </div>`).join('');
+    } catch { toast('Failed to load stats', 'error'); }
+  }
+
+  /* ── MODAL HELPERS ── */
+  function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+  document.querySelectorAll('.modal-overlay').forEach(o =>
+    o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); }));
+
+  /* ── INIT ── */
+  (async () => {
+    await checkHealth();
+    loadDashboard();
+  })();
+</script>
+</body>
+</html>
